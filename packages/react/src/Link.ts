@@ -7,13 +7,13 @@ import {
   Method,
   PendingVisit,
   resolveUrlMethodPairComponent,
-  router,
   shouldIntercept,
   shouldNavigate,
   VisitOptions,
 } from '@inertiajs/core'
 import { createElement, ElementType, forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { config } from '.'
+import useRouter from './useRouter'
 
 const noop = () => undefined
 
@@ -68,6 +68,7 @@ const Link = forwardRef<unknown, InertiaLinkProps>(
     },
     ref,
   ) => {
+    const router = useRouter()
     const [inFlightCount, setInFlightCount] = useState(0)
     const hoverTimeout = useRef<number>(undefined)
 
@@ -221,7 +222,7 @@ const Link = forwardRef<unknown, InertiaLinkProps>(
           { cacheFor: cacheForValue, cacheTags },
         )
       }
-    }, [url, baseParams, onPrefetching, onPrefetched, cacheForValue, cacheTags])
+    }, [url, baseParams, onPrefetching, onPrefetched, cacheForValue, cacheTags, router])
 
     useEffect(() => {
       return () => {

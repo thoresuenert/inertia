@@ -6,7 +6,9 @@
 import type { VisitParams } from '../pure/types'
 import type { Scope } from './createScope'
 
-export type PollHandle = { stop(): void; start(): void }
+// destroy is part of core's poll handle and usePoll calls it on unmount
+// (M09 finding) — for a scope it is the same as stop.
+export type PollHandle = { stop(): void; start(): void; destroy(): void }
 
 export type ScopeRouter = Scope & {
   __scope: true
@@ -64,7 +66,7 @@ export function withSurface(
       if (options.autoStart !== false) {
         start()
       }
-      return { stop, start }
+      return { stop, start, destroy: stop }
     },
 
     // A8: the per-scope map IS the namespace — no shared storage, keys stay raw.

@@ -1,7 +1,8 @@
-import { ReloadOptions, router } from '@inertiajs/core'
+import { ReloadOptions } from '@inertiajs/core'
 import { get } from 'es-toolkit/compat'
 import { createElement, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import usePage from './usePage'
+import useRouter from './useRouter'
 
 interface WhenVisibleSlotProps {
   fetching: boolean
@@ -22,6 +23,7 @@ const WhenVisible = ({ children, data, params, buffer, as, always, fallback }: W
   as = as ?? 'div'
   fallback = fallback ?? null
 
+  const router = useRouter()
   const pageProps = usePage().props
   const keys = useMemo(() => (data ? (Array.isArray(data) ? data : [data]) : []), [data])
 
@@ -113,7 +115,7 @@ const WhenVisible = ({ children, data, params, buffer, as, always, fallback }: W
     return () => {
       observer.current?.disconnect()
     }
-  }, [always, loaded, buffer])
+  }, [always, loaded, buffer, router])
 
   const resolveChildren = () => (typeof children === 'function' ? children({ fetching: isFetching }) : children)
   const resolveFallback = () => (typeof fallback === 'function' ? fallback() : fallback)

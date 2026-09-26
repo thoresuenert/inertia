@@ -38,6 +38,14 @@ and marked it ✅/❌. If a fact is ❌, stop — rules may need to change first
 | F21 | ✅ | React E2E: `pnpm test:react` runs Playwright against `tests/app` (Node server) | root `package.json`, `playwright.config.ts:62` |
 | F22 | ✅ | Playground: Laravel 13 (`laravel/framework ^13.0`), React 19, Vite 8, SQLite, `./init.sh`, models `User`, `Todo` (plus `ChatMessage`) | `playgrounds/react` |
 
+## M09 findings
+
+- Core's `router.poll()` returns `{ stop, start, destroy }` — `usePoll` calls
+  `destroy()` on unmount (`usePoll.ts`), so the scope's poll handle includes
+  `destroy` (= stop) beyond A7's `{ stop, start }`.
+- `usePoll` may pass `requestOptions` as a **function**; the scope's
+  `reload({...fn})` degrades to `reload({})`. Known PoC gap, demo uses objects.
+
 ## M00 environment notes
 
 - Repo requires pnpm ≥ 11.1.1 and Node ≥ 22 for pnpm 11 itself. Local default is

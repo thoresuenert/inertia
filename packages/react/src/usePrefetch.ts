@@ -1,5 +1,6 @@
-import { router, VisitOptions } from '@inertiajs/core'
+import { VisitOptions } from '@inertiajs/core'
 import { useEffect, useState } from 'react'
+import useRouter from './useRouter'
 
 export default function usePrefetch(options: VisitOptions = {}): {
   lastUpdatedAt: number | null
@@ -7,6 +8,7 @@ export default function usePrefetch(options: VisitOptions = {}): {
   isPrefetched: boolean
   flush: () => void
 } {
+  const router = useRouter()
   const cached = typeof window === 'undefined' ? null : router.getCached(window.location.pathname, options)
   const inFlight = typeof window === 'undefined' ? null : router.getPrefetching(window.location.pathname, options)
 
@@ -33,7 +35,7 @@ export default function usePrefetch(options: VisitOptions = {}): {
       onPrefetchedListener()
       onPrefetchingListener()
     }
-  }, [])
+  }, [router])
 
   return {
     lastUpdatedAt,

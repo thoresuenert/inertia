@@ -1,11 +1,13 @@
-import { router } from '@inertiajs/core'
 import { Dispatch, MutableRefObject, SetStateAction, useEffect, useState } from 'react'
+import useRouter from './useRouter'
 
 export default function useRemember<State>(
   initialState: State,
   key?: string,
   excludeKeysRef?: MutableRefObject<string[]>,
 ): [State, Dispatch<SetStateAction<State>>] {
+  const router = useRouter()
+
   const [state, setState] = useState(() => {
     const restored = router.restore(key) as State
 
@@ -21,7 +23,7 @@ export default function useRemember<State>(
     } else {
       router.remember(state, key)
     }
-  }, [state, key])
+  }, [state, key, router])
 
   return [state, setState]
 }

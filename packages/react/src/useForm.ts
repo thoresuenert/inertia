@@ -9,7 +9,6 @@ import {
   OptimisticCallback,
   Progress,
   RequestPayload,
-  router,
   UrlMethodPair,
   UseFormArguments,
   UseFormSubmitArguments,
@@ -24,6 +23,7 @@ import type { NamedInputEvent, PrecognitionPath, ValidationConfig, Validator } f
 import { useCallback, useMemo, useRef } from 'react'
 import useFormState, { SetDataAction, SetDataByKeyValuePair, SetDataByMethod, SetDataByObject } from './useFormState'
 import useRemember from './useRemember'
+import useRouter from './useRouter'
 
 // Re-export types that were moved to useFormState
 export { SetDataAction, SetDataByKeyValuePair, SetDataByMethod, SetDataByObject }
@@ -112,6 +112,7 @@ export default function useForm<TForm extends FormDataType<TForm>>(): InertiaFor
 export default function useForm<TForm extends FormDataType<TForm>>(
   ...args: UseFormArguments<TForm>
 ): InertiaFormProps<TForm> | InertiaPrecognitiveFormProps<TForm> {
+  const router = useRouter()
   const { rememberKey, data, precognitionEndpoint } = UseFormUtils.parseUseFormArguments<TForm>(...args)
 
   // Resolve initial data for remember functionality hooks
@@ -229,7 +230,7 @@ export default function useForm<TForm extends FormDataType<TForm>>(
         router[method](url, transformedData, _options)
       }
     },
-    [clearErrors, setError, transformRef],
+    [clearErrors, setError, transformRef, router],
   )
 
   const cancel = useCallback(() => {

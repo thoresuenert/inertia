@@ -1,5 +1,6 @@
-import { PollOptions, ReloadOptions, router } from '@inertiajs/core'
+import { PollOptions, ReloadOptions } from '@inertiajs/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import useRouter from './useRouter'
 
 export default function usePoll(
   interval: number,
@@ -9,6 +10,8 @@ export default function usePoll(
     autoStart: true,
   },
 ) {
+  const router = useRouter()
+
   const latest = useRef(requestOptions)
   latest.current = requestOptions
 
@@ -24,7 +27,7 @@ export default function usePoll(
     )
 
     return () => pollRef.current?.destroy()
-  }, [])
+  }, [router])
 
   const stop = useCallback(() => {
     pollRef.current?.stop()

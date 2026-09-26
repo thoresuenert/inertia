@@ -68,11 +68,12 @@ it('A6: delete takes params only, data via params.data', () => {
   expect(pending[0].req).toMatchObject({ method: 'delete', data: { reason: 'gone' } })
 })
 
-it('A7: poll reloads every interval; stop and start work', () => {
+it('A7: poll reloads every interval; stop, start and destroy work', () => {
   vi.useFakeTimers()
   const { scope, pending } = makeScope()
 
   const handle = scope.poll(1000, { only: ['users'] })
+  expect(typeof handle.destroy).toBe('function') // usePoll calls it on unmount (M09)
   vi.advanceTimersByTime(2100)
   expect(pending).toHaveLength(2)
   expect(pending[0].req.method).toBe('get')
@@ -84,6 +85,10 @@ it('A7: poll reloads every interval; stop and start work', () => {
 
   handle.start()
   vi.advanceTimersByTime(1000)
+  expect(pending).toHaveLength(3)
+
+  handle.destroy()
+  vi.advanceTimersByTime(2000)
   expect(pending).toHaveLength(3)
 })
 
