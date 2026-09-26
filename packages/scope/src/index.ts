@@ -14,6 +14,8 @@ export type {
   VisitParams,
 } from './pure/types'
 export { applyPage } from './pure/applyPage'
+export { createEmitter, type Emitter } from './pure/emitter'
+export { createStore, type Store } from './pure/store'
 export { buildHeaders } from './pure/headers'
 export { resolveTarget } from './pure/resolveTarget'
 export { mergeQuery, samePath, toUrl } from './pure/url'
