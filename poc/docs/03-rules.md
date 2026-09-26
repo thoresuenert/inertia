@@ -96,8 +96,10 @@ the rule wins — or the rule is changed on purpose, here, first.
 - **T4** Otherwise → `root`.
 - **T5** `self`: `applyPage(current, incoming, { partial })`. Partial + same component →
   `props = { ...current.props, ...incoming.props }`; otherwise replace. `errors` always from
-  incoming (default `{}`), `rescuedProps` default `[]`. Then errors non-empty → `onError`,
-  else `onSuccess(page)`.
+  incoming (default `{}`), `rescuedProps` default `[]`. In the merge case, `deferredProps`
+  is kept from `current` when incoming has none — Laravel partial responses omit the map,
+  and without it an aborted deferred fetch is never retried (D3, findings F-06). Then errors
+  non-empty → `onError`, else `onSuccess(page)`.
 - **T6** `parent` with root parent, or `root`: `root.replace(page)` if the URL equals the
   current root URL, else `root.push(page)` (with `preserveScroll`/`preserveState` true). Then
   `onSuccess`, then dispose. If the page has `deferredProps`: `root.reload(allDeferredKeys)`.

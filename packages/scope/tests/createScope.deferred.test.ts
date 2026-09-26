@@ -73,6 +73,27 @@ it('D3: a search that aborts the deferred fetch re-triggers it after applying', 
   expect(pending).toHaveLength(4) // satisfied, no further requests
 })
 
+it('D3/F-06: retry also works when the aborting partial response omits deferredProps', async () => {
+  const { scope, pending } = makeLoading()
+
+  pending[0].resolve(result(widgetPage()))
+  await flush()
+  expect(pending).toHaveLength(2) // deferred fetch for `stats` in flight
+
+  scope.visit('/scopes/widget', { only: ['time'] })
+  await flush() // C1 aborts the deferred fetch
+
+  // Real Laravel partial responses carry NO deferredProps key (F-06).
+  const partial = widgetPage({ props: { errors: {}, time: '12:05' } })
+  delete partial.deferredProps
+  pending[2].resolve(result(partial))
+  await flush()
+
+  // T5 kept the current map alive → D1 retries the stats fetch.
+  expect(pending).toHaveLength(4)
+  expect(pending[3].req.headers['X-Inertia-Partial-Data']).toBe('stats')
+})
+
 it('D-guard: a deferred fetch that still misses its keys does not loop', async () => {
   const { pending } = makeLoading()
 

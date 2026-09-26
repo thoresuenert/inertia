@@ -55,8 +55,14 @@ when a scope visit interrupts a slow deferred load — the demo's fast fetch
 completes before the first poll, so it normally works. **Idea:** amend T5 so
 a partial merge *keeps* `current.deferredProps` when the incoming page has
 none (mirror of the props merge); alternatively the RFC should require server
-adapters to always include `deferredProps`. Rule change first (03-rules), then
-code — not patched in this PoC.
+adapters to always include `deferredProps`.
+
+**Resolved:** T5 amended in `03-rules.md` (rule change first), `applyPage`
+keeps `current.deferredProps` in the merge case when incoming has none.
+Re-verified in the browser: the aborted stats fetch is retried right after
+the poll's partial response applies, stats render (2 requests, UI resolves).
+For the RFC: this retention rule belongs in the default response-application
+semantics, not just in adapters.
 
 ## F-07 Nested scopes need a component, so "only Index imports the package" bent
 

@@ -14,9 +14,17 @@ export function applyPage(current: ScopePage | null, incoming: ScopePage, opts: 
   // partial reload that did not include errors.
   props.errors = incoming.props?.errors ?? {}
 
-  return {
+  const page: ScopePage = {
     ...incoming,
     props,
     rescuedProps: incoming.rescuedProps ?? [],
   }
+
+  // T5/F-06: Laravel partial responses omit deferredProps — keep the current
+  // map in the merge case, or an aborted deferred fetch is never retried (D3).
+  if (merge && current?.deferredProps && incoming.deferredProps === undefined) {
+    page.deferredProps = current.deferredProps
+  }
+
+  return page
 }

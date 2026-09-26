@@ -51,6 +51,22 @@ it('T5: errors always from incoming, defaulting to {}', () => {
   expect(result.props.errors).toEqual({}) // stale error gone, default applied
 })
 
+it('T5: partial merge keeps current deferredProps when incoming has none (F-06)', () => {
+  const current = page({ deferredProps: { default: ['stats'] } })
+  const incoming = page() // Laravel partial responses omit the map
+
+  const merged = applyPage(current, incoming, { partial: true })
+  expect(merged.deferredProps).toEqual({ default: ['stats'] })
+
+  // Replace cases never inherit the stale map.
+  const replaced = applyPage(current, incoming, { partial: false })
+  expect(replaced.deferredProps).toBeUndefined()
+
+  // An incoming map wins over the current one.
+  const updated = applyPage(current, page({ deferredProps: { other: ['jobs'] } }), { partial: true })
+  expect(updated.deferredProps).toEqual({ other: ['jobs'] })
+})
+
 it('T5: rescuedProps defaults to []', () => {
   const incoming = page()
   delete (incoming as Partial<ScopePage>).rescuedProps
