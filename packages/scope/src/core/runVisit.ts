@@ -30,6 +30,7 @@ export type ScopeContext = {
   failInitial: (reason: string) => void
   dispose: () => void
   parentApply?: (page: ScopePage) => void
+  selfReload: (only: string[]) => void
 }
 
 export async function runVisit(ctx: ScopeContext, url: string, params: VisitParams): Promise<void> {

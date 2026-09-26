@@ -108,4 +108,26 @@ async function applySelf(
   } else {
     await params.onSuccess?.(next) // T5, awaited (F17)
   }
+
+  loadDeferred(ctx, next, visit)
+}
+
+// D1/D2: after a self apply, fetch still-missing deferred props with ONE
+// partial reload (a normal GET — C1 applies, which is what makes D3 work).
+function loadDeferred(ctx: ScopeContext, page: ScopePage, visit: ScopeVisit): void {
+  const missing = Object.values(page.deferredProps ?? {})
+    .flat()
+    .filter((key) => page.props[key] === undefined)
+
+  if (missing.length === 0) {
+    return
+  }
+
+  // Loop guard: this visit already asked for exactly these keys and the
+  // server did not deliver them — asking again would loop forever.
+  if (missing.length === visit.only.length && missing.every((key) => visit.only.includes(key))) {
+    return
+  }
+
+  ctx.selfReload(missing)
 }

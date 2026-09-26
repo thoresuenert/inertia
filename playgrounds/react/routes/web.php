@@ -485,3 +485,16 @@ Route::get('/ssr-debug', fn () => inertia('SsrDebug'));
 Route::get('/ssr-debug/window', fn () => inertia('SsrDebug/WindowError'));
 Route::get('/ssr-debug/document', fn () => inertia('SsrDebug/DocumentError'));
 Route::get('/ssr-debug/localstorage', fn () => inertia('SsrDebug/LocalStorageError'));
+
+// Router Scopes PoC demo (M12). Ordinary Inertia routes — the scope headers
+// are handled entirely by the ResolveInertiaScope middleware.
+Route::prefix('/scopes')->group(function () {
+    Route::get('/', [App\Http\Controllers\Scopes\TodosController::class, 'index']);
+    Route::get('/todos/create', [App\Http\Controllers\Scopes\TodosController::class, 'create']);
+    Route::post('/todos', [App\Http\Controllers\Scopes\TodosController::class, 'store']);
+    Route::get('/users', [App\Http\Controllers\Scopes\UsersController::class, 'index']);
+    Route::get('/users/{user}', [App\Http\Controllers\Scopes\UsersController::class, 'show']);
+    Route::post('/users/{user}/select', [App\Http\Controllers\Scopes\UsersController::class, 'select']);
+    Route::get('/widget', [App\Http\Controllers\Scopes\WidgetController::class, 'show']);
+    Route::get('/error', fn () => abort(500));
+});

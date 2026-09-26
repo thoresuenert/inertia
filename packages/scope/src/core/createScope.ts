@@ -102,6 +102,12 @@ export function createScope(options: ScopeOptions, deps: ScopeDeps): ScopeRouter
     },
     dispose,
     parentApply: deps.parent ? (incoming) => deps.parent!.applyPage(incoming) : undefined,
+    selfReload: (only) => {
+      const current = page.get()
+      if (current && status !== 'disposed') {
+        void runVisit(ctx, current.url, { method: 'get', only }) // D2
+      }
+    },
   }
 
   const guard = (action: string): boolean => {
