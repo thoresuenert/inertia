@@ -13,4 +13,6 @@ export type {
   Target,
   VisitParams,
 } from './pure/types'
+export { buildHeaders } from './pure/headers'
+export { resolveTarget } from './pure/resolveTarget'
 export { mergeQuery, samePath, toUrl } from './pure/url'
