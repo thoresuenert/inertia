@@ -1,9 +1,17 @@
 # RFC: Router Scopes — isolated, disposable Inertia contexts for modals, slideovers and embedded views
 
-- **Status:** Draft
+- **Status:** Draft, revision 2 (validated by a working PoC)
 - **Target:** `@inertiajs/core`, `@inertiajs/react`, `@inertiajs/vue3`, `@inertiajs/svelte`, `inertiajs/inertia-laravel`
 - **Based on:** Inertia v3.7.x
 - **Breaking changes:** None (fully opt-in)
+
+> **Revision 2 (2026-09-26).** Amended after a proof of concept built rollout step 1
+> (adapter: router from context) plus a standalone scope library and Laravel middleware
+> against this fork (branch `poc/router-scopes`). Evidence: a ~70-line `packages/react`
+> diff with the full Playwright suite unchanged (1201 passed), 105 unit tests over the
+> scope library, 9 Laravel feature tests, and an automated pass over the manual QA plan
+> (34 checks + 4 browser-driven edge cases). Amendments are marked **[PoC]** and sourced
+> from `poc/findings.md`.
 
 ---
 
@@ -165,7 +173,7 @@ All familiar methods keep their signatures and semantics, applied to the scope:
 | `visit`, `get`, `post`, `put`, `patch`, `delete` | Request is sent with scope headers (§5); the response is routed by `resolveTarget`. |
 | `reload({ only, except, data })` | Partial reload against the **scope page URL** and component. |
 | `prefetch`, `getCached`, `flush*` | Operate on the scope's cache (or the parent's if `sharePrefetchCache`). |
-| `poll` | Registered in the scope's poll set; stopped on dispose. |
+| `poll` | Registered in the scope's poll set; stopped on dispose. **[PoC]** The returned handle must be the full `{ stop, start, destroy }` — `usePoll` calls `destroy()` on unmount, so `destroy` is part of the contract. `requestOptions` may be a function (core accepts one); scope implementations must too. |
 | `remember`, `restore` | Namespaced by scope name/id (§4.7). |
 | `push`, `replace`, `replaceProp`, `appendToProp` | Client-side updates of the scope page. Touch `window.history` only if `history: 'parent'`. |
 | `cancelAll` | Cancels only the scope's requests. |
@@ -217,6 +225,13 @@ router.on('start', (event) => {
 
 `before` remains cancelable at every level; a parent listener returning `false` cancels a child's visit.
 
+**Client-side visits and `navigate`. [PoC]** In v3.7.x, `router.push()` fires `navigate`
+but `router.replace()` does not (`page.set` fires it only for non-replace updates).
+Anything that reacts to "the root navigated" — closing scopes, analytics, scroll
+restoration — must not assume every client-side visit emits `navigate`. This revision
+proposes that `replace` also fire `navigate` (with `replace: true` in the detail); until
+then the asymmetry must be documented wherever scope auto-disposal is specified.
+
 ### 4.5 Response routing
 
 After a response is received, the scope asks its resolver where to apply it:
@@ -249,6 +264,15 @@ This yields the behaviour developers expect without configuration:
 
 When the target is `parent` or `root`, the incoming page is applied there **without an additional request**, exactly as a normal Inertia response would be.
 
+**Partial responses and `deferredProps`. [PoC]** Laravel's partial responses omit the
+`deferredProps` map. When a partial response for the same component is merged into a
+scope page, the current page's `deferredProps` **must be retained** if the incoming page
+carries none — otherwise a deferred load aborted by a competing visit (a search, a poll)
+is never retried and its fallback shows forever. This retention belongs to the core
+response-application semantics, not to server adapters: it was confirmed against
+inertia-laravel (the aborted fetch hung until the rule was added, and retried correctly
+after).
+
 ### 4.6 Lifecycle and teardown
 
 `scope.dispose()`:
@@ -274,6 +298,11 @@ After dispose, calling any visit method is a no-op and logs a development warnin
 
 - `head: 'ignore'` (default): `<Head>` inside a scope renders nothing. `head: 'stack'`: the scope's title and meta override the parent while mounted and are restored on dispose.
 - `layouts: false` (default): scope components are rendered without persistent layouts.
+  **[PoC]** Today this holds only by accident: adapters attach default layouts during the
+  root `App` render, not inside `resolveComponent`, so a scope rendering the resolved
+  component directly skips them. The `layouts: false` guarantee must be owned by the
+  scope renderer — if layout attachment ever moves into `resolveComponent`, scopes would
+  silently inherit page layouts.
 - `progress: false` (default): visits in the scope do not show the global progress bar. Adapters expose the scope's loading state (§6.4) for local indicators.
 
 ### 4.9 Asset version and errors
@@ -342,6 +371,17 @@ public function shareInScope(Request $request): array
 
 The default implementation returns `[]`; `errors` and flash data are always included.
 
+**Two lessons from the PoC middleware. [PoC]**
+
+- "Flash" here means Inertia's first-class flash (`Inertia::flash()` → `page.flash`).
+  Laravel session flash via `redirect()->with()` never reaches the page object — all
+  scope examples and adapter docs must use `Inertia::flash()`.
+- `withScopeTarget()` flashes to the session precisely because headers on redirect
+  responses are dropped by the browser. The middleware must therefore read that flash
+  **before** handling the request (i.e. only a *previous* request's flash), and request
+  attributes **after**. Reading the flash after `$next()` makes the redirecting response
+  consume its own flash: the target header lands on the 302 and is lost.
+
 ---
 
 ## 6. Detailed design — Adapters
@@ -376,6 +416,14 @@ interface RouterScopeProps extends RouterScopeOptions {
 
 - If `router` is not passed, the component creates a scope on mount and **disposes it on unmount**.
 - If `children` is omitted, the resolved page component is rendered with the scope page props.
+- **[PoC]** Under React `<StrictMode>` the create-in-effect lifecycle produces one extra,
+  immediately-disposed scope per mount — one discarded request in development. That is
+  the documented cost of effect-based creation; responses belonging to disposed scopes
+  are never applied, even when the abort races a fast server response.
+- **[PoC]** With a native `<dialog>` + `showModal()`, the page behind is inert — "the
+  root navigates while a scope is open" can then only happen programmatically (back
+  button, redirects, timers). Auto-disposal on root navigation is still required, but
+  specs and tests must not assume user clicks as its trigger.
 
 ### 6.3 `useRouterScope()`
 
@@ -745,6 +793,18 @@ The proposal splits into independent, individually useful steps:
 
 Steps 1 and 2 are internal refactors with no public API change and can ship in a minor release.
 
+**Step 1 is implemented and validated. [PoC]** On this fork, the React adapter change is
+~70 lines (a `RouterContext` defaulting to the global router, `useRouter()`, seven
+files switched, `Deferred` comparing against `usePage().url`), measured behaviour-neutral:
+the full Playwright suite is identical to its pre-change baseline. With only step 1 and a
+userland scope library, `Link`, `Form`/`useForm`, `usePage`, `Deferred`, `usePoll` and
+`useRemember` all work unmodified inside scopes — a searchable paginated picker, a form
+with validation errors, nested modals with parent-targeted responses, and a polling widget
+with deferred props were demonstrated end-to-end. `InfiniteScroll` is the one primitive
+that cannot be scoped from the adapter (core's implementation imports the router
+directly) — concrete evidence that step 2 is required for full coverage, and for nothing
+less than that.
+
 ---
 
 ## 10. Drawbacks
@@ -792,6 +852,20 @@ Steps 1 and 2 are internal refactors with no public API change and can ship in a
 6. **Precognition.** Does live validation inside a scope need the scope headers? (Likely yes, for error bags.)
 7. **SSR.** Is there a use case for server-rendering the initial page of a scope, or is client-side loading always acceptable?
 8. **Development warning for global `router` calls** (§8.2): is there a reliable detection strategy across React, Vue and Svelte, or should this be documentation-only?
+
+### 13.1 Settled by the PoC **[PoC]**
+
+- **Question 6 (Precognition), partially:** the PoC left Precognition untouched and
+  nothing broke, but live validation inside a scope was not exercised — still open.
+- **Question 7 (SSR):** client-side loading of the initial scope page (`url` + fallback)
+  was unobtrusive in practice (one request, spinner for one round-trip). No SSR need
+  surfaced; keeping SSR out of the first iteration is confirmed as the right call.
+- **New, answered:** the poll-handle shape (§4.2), the `navigate`/`replace` asymmetry
+  (§4.4), `deferredProps` retention on partial merges (§4.5), Inertia-flash vs session
+  flash and the flash-read ordering in server middleware (§5.3), the StrictMode cost and
+  the `showModal()` interaction (§6.2), and the layout-attachment fragility (§4.8).
+- The full evidence trail, including two bugs found and fixed during QA, lives in
+  `poc/findings.md`; behaviour rules with per-rule tests live in `poc/docs/03-rules.md`.
 
 ---
 
