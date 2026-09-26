@@ -13,7 +13,9 @@ export type {
   Target,
   VisitParams,
 } from './pure/types'
+export { createScope, type Scope, type ScopeDeps, type ScopeOptions } from './core/createScope'
 export { createRootAdapter, type LocationLike, type RootAdapter } from './core/rootAdapter'
+export { type ScopeStatus } from './core/runVisit'
 export {
   createTransport,
   type Transport,
