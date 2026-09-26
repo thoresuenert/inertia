@@ -12,6 +12,7 @@ import { createConcurrency } from './concurrency'
 import { createLifecycle } from './lifecycle'
 import { runVisit, type ScopeContext, type ScopeStatus } from './runVisit'
 import type { RootAdapter } from './rootAdapter'
+import { withSurface, type ScopeRouter } from './surface'
 import type { Transport } from './transport'
 
 export type ScopeDeps = {
@@ -38,7 +39,7 @@ export type Scope = {
 
 let scopeCount = 0
 
-export function createScope(options: ScopeOptions, deps: ScopeDeps): Scope {
+export function createScope(options: ScopeOptions, deps: ScopeDeps): ScopeRouter {
   if (!options.url === !options.page) {
     throw new Error('createScope: pass either `url` or `page`, not neither/both') // L1
   }
@@ -68,7 +69,7 @@ export function createScope(options: ScopeOptions, deps: ScopeDeps): Scope {
   const concurrency = createConcurrency()
   const remembered = new Map<string, unknown>() // filled in M08 (A8), cleared on dispose
 
-  const { dispose, wire } = createLifecycle({
+  const { dispose, cleanups, wire } = createLifecycle({
     isDisposed: () => status === 'disposed',
     markDisposed: () => {
       status = 'disposed'
@@ -140,7 +141,9 @@ export function createScope(options: ScopeOptions, deps: ScopeDeps): Scope {
     dispose,
   }
 
-  wire(scope, deps.parent, deps.root)
+  // withSurface mutates `scope` (identity matters for the child registry).
+  const surfaced = withSurface(scope, { addCleanup: (fn) => cleanups.push(fn), remembered })
+  wire(surfaced, deps.parent, deps.root)
 
   if (options.page) {
     setPage(options.page)
@@ -148,5 +151,5 @@ export function createScope(options: ScopeOptions, deps: ScopeDeps): Scope {
     void runVisit(ctx, options.url, {})
   }
 
-  return scope
+  return surfaced
 }

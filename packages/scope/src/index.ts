@@ -14,6 +14,7 @@ export type {
   VisitParams,
 } from './pure/types'
 export { createScope, type Scope, type ScopeDeps, type ScopeOptions } from './core/createScope'
+export { type PollHandle, type ScopeRouter } from './core/surface'
 export { createRootAdapter, type LocationLike, type RootAdapter } from './core/rootAdapter'
 export { type ScopeStatus } from './core/runVisit'
 export {
