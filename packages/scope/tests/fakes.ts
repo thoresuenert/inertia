@@ -68,6 +68,7 @@ export function fakeRoot(initialUrl = 'http://app.test/dashboard') {
   return {
     adapter,
     calls,
+    listenerCount: () => navigateListeners.size,
     // Simulates a root navigation: updates currentUrl, then notifies (L5 tests).
     navigate(to: string) {
       url = to

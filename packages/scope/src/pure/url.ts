@@ -18,6 +18,15 @@ export function samePath(a: string, b: string, base: string): boolean {
   return normalizePath(toUrl(a, base).pathname) === normalizePath(toUrl(b, base).pathname)
 }
 
+// T6 "URL equals": same pathname AND same query; hash ignored. The query is
+// compared as a string, so parameter order matters — good enough for
+// comparing server-generated URLs with themselves.
+export function sameUrl(a: string, b: string, base: string): boolean {
+  const urlA = toUrl(a, base)
+  const urlB = toUrl(b, base)
+  return normalizePath(urlA.pathname) === normalizePath(urlB.pathname) && urlA.search === urlB.search
+}
+
 // U2: merge `data` into the query string of `href`. Existing keys are
 // overwritten (plain and `key[]` form), null/undefined remove the key,
 // arrays serialize as `key[]=`, nested objects throw. Returns an absolute URL.

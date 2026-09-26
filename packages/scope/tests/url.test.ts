@@ -1,7 +1,7 @@
 // Tests for pure/url.ts — rules U1 and U2, plus the samePath trailing
 // slash rule documented in the url.ts header.
 import { expect, it } from 'vitest'
-import { mergeQuery, samePath, toUrl } from '../src/pure/url'
+import { mergeQuery, samePath, sameUrl, toUrl } from '../src/pure/url'
 
 const base = 'http://app.test/scopes/users?page=1'
 
@@ -23,6 +23,12 @@ it('samePath: trailing slash is normalized, root stays root', () => {
   expect(samePath('/users/', '/users', base)).toBe(true)
   expect(samePath('/', '/', base)).toBe(true)
   expect(samePath('/', '/users', base)).toBe(false)
+})
+
+it('T6: sameUrl compares pathname and query, ignores hash', () => {
+  expect(sameUrl('/users?page=2', 'http://app.test/users?page=2#top', base)).toBe(true)
+  expect(sameUrl('/users?page=2', '/users?page=3', base)).toBe(false)
+  expect(sameUrl('/users/', '/users', base)).toBe(true)
 })
 
 it('U2: data overwrites existing query keys and keeps the others', () => {

@@ -8,6 +8,7 @@ import { buildHeaders } from '../pure/headers'
 import type { Store } from '../pure/store'
 import type { ScopeEventDetailMap, ScopePage, ScopeVisit, VisitParams } from '../pure/types'
 import { mergeQuery, toUrl } from '../pure/url'
+import type { Concurrency } from './concurrency'
 import { handleResult } from './handleResult'
 import type { RootAdapter } from './rootAdapter'
 import type { Transport } from './transport'
@@ -23,12 +24,21 @@ export type ScopeContext = {
   parentUrl: () => string
   page: Store<ScopePage | null>
   emitter: Emitter<ScopeEventDetailMap>
+  concurrency: Concurrency
   status: () => ScopeStatus
   setPage: (page: ScopePage) => void
   failInitial: (reason: string) => void
+  dispose: () => void
+  parentApply?: (page: ScopePage) => void
 }
 
 export async function runVisit(ctx: ScopeContext, url: string, params: VisitParams): Promise<void> {
+  // C2: while a non-GET is in flight, new visits run no callbacks at all.
+  if (ctx.concurrency.blocked()) {
+    console.warn(`scope "${ctx.name}": visit ignored, a non-GET request is in flight`)
+    return
+  }
+
   const visit = buildVisit(ctx, url, params)
 
   // Q4: either may cancel; nothing was sent, so no further callbacks (and no
@@ -40,25 +50,41 @@ export async function runVisit(ctx: ScopeContext, url: string, params: VisitPara
     return
   }
 
-  const controller = new AbortController()
+  const controller = ctx.concurrency.begin(visit.method) // C1/C3 abort happens here
+  if (!controller) {
+    return // C2 reentrant edge (a before listener started a non-GET)
+  }
   params.onCancelToken?.({ cancel: () => controller.abort() }) // A4: before onStart
 
   params.onStart?.(visit)
   ctx.emitter.emit('start', { visit })
 
+  let suppressed = false
   try {
-    const result = await ctx.transport.send({
+    let result = await ctx.transport.send({
       method: visit.method,
       url: visit.url.href,
       data: visit.method === 'get' ? undefined : visit.data,
       headers: visit.headers,
       signal: controller.signal,
     })
+    // Free the slot before handleResult: a dispose triggered by THIS visit
+    // (T6/T7) must not abort its own already-completed request.
+    ctx.concurrency.finish(controller)
+    if (ctx.status() === 'disposed') {
+      suppressed = true // L3: dispose-aborted visits are fully silent
+      return
+    }
+    if (controller.signal.aborted && result.kind === 'page') {
+      result = { kind: 'aborted' } // C4: a response that raced the abort is never applied
+    }
     await handleResult(ctx, visit, params, result)
   } finally {
-    // P1: exactly once for every visit that started. Same object as start (A3).
-    params.onFinish?.(visit)
-    ctx.emitter.emit('finish', { visit })
+    if (!suppressed) {
+      // P1: exactly once for every visit that started. Same object as start (A3).
+      params.onFinish?.(visit)
+      ctx.emitter.emit('finish', { visit })
+    }
   }
 }
 

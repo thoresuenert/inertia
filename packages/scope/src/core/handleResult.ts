@@ -1,10 +1,13 @@
-// Applies a transport result to the scope. M06: pages always target `self`
-// (T5, T8) — target routing to parent/root arrives in M07. Transport failures
-// emit `error` with empty errors (P3–P5); validation errors are NOT `error`
-// events — they ride an applied page (T5 onError callback + T8 success event).
+// Applies a transport result to the scope. Pages are routed by resolveTarget
+// (T1–T4): self (T5, T8), a parent scope (T7) or the root (T6 — also for
+// `parent` when the parent IS the root). Transport failures emit `error` with
+// empty errors (P3–P5); validation errors are NOT `error` events — they ride
+// an applied page (T5 onError callback + T8 success event).
 
 import { applyPage } from '../pure/applyPage'
+import { resolveTarget } from '../pure/resolveTarget'
 import type { ScopePage, ScopeVisit, VisitParams } from '../pure/types'
+import { sameUrl, toUrl } from '../pure/url'
 import type { ScopeContext } from './runVisit'
 import type { TransportResult } from './transport'
 
@@ -16,7 +19,7 @@ export async function handleResult(
 ): Promise<void> {
   switch (result.kind) {
     case 'page':
-      return applySelf(ctx, visit, params, result.page)
+      return routePage(ctx, visit, params, result.page, result.serverTarget)
 
     case 'location':
       ctx.failInitial('initial load failed (location)')
@@ -34,6 +37,56 @@ export async function handleResult(
       ctx.failInitial(`initial load failed (${result.kind})`)
       ctx.emitter.emit('error', { errors: {}, visit }) // P3–P5: page unchanged
       return
+  }
+}
+
+async function routePage(
+  ctx: ScopeContext,
+  visit: ScopeVisit,
+  params: VisitParams,
+  page: ScopePage,
+  serverTarget: string | null,
+): Promise<void> {
+  // Page URLs from the server are host-relative — absolutize before comparing.
+  const target = resolveTarget({
+    serverTarget,
+    incomingUrl: page.url,
+    scopeUrl: toUrl(ctx.page.get()?.url ?? visit.url.href, ctx.root.currentUrl()).href,
+    parentUrl: ctx.parentUrl(),
+  })
+
+  if (target === 'self') {
+    return applySelf(ctx, visit, params, page)
+  }
+  if (target === 'parent' && ctx.parentApply) {
+    return applyToParent(ctx, visit, params, page) // T7
+  }
+  return applyToRoot(ctx, visit, params, page) // T6: root, or parent with root parent
+}
+
+// T7: the parent scope receives the page; this scope is done.
+async function applyToParent(ctx: ScopeContext, visit: ScopeVisit, params: VisitParams, page: ScopePage): Promise<void> {
+  ctx.parentApply!(page)
+  ctx.emitter.emit('success', { page, visit }) // T8
+  await params.onSuccess?.(page)
+  ctx.dispose()
+}
+
+// T6: apply on the root without a request, then this scope is done. Deferred
+// props of the new root page are fetched with one root reload.
+async function applyToRoot(ctx: ScopeContext, visit: ScopeVisit, params: VisitParams, page: ScopePage): Promise<void> {
+  const rootUrl = ctx.root.currentUrl()
+  if (sameUrl(page.url, rootUrl, rootUrl)) {
+    ctx.root.replace(page)
+  } else {
+    ctx.root.push(page)
+  }
+  ctx.emitter.emit('success', { page, visit }) // T8
+  await params.onSuccess?.(page)
+  ctx.dispose()
+  const deferredKeys = Object.values(page.deferredProps ?? {}).flat()
+  if (deferredKeys.length > 0) {
+    ctx.root.reload(deferredKeys)
   }
 }
 

@@ -1,11 +1,15 @@
 // A scope: an isolated page store + emitter + visit methods on top of the
-// injected transport/root deps (L1, L2). M06 subset — visit/reload/on/
-// applyPage; concurrency and dispose arrive in M07, the full surface in M08.
+// injected transport/root deps (L1, L2), with deterministic teardown (L3–L5).
+// Child scopes register with their parent for cascade dispose; the full
+// router surface arrives in M08.
 
 import { applyPage as applyIncoming } from '../pure/applyPage'
 import { createEmitter } from '../pure/emitter'
 import { createStore, type Store } from '../pure/store'
 import type { ScopeEventDetail, ScopeEventDetailMap, ScopeEventName, ScopePage, VisitParams } from '../pure/types'
+import { toUrl } from '../pure/url'
+import { createConcurrency } from './concurrency'
+import { createLifecycle } from './lifecycle'
 import { runVisit, type ScopeContext, type ScopeStatus } from './runVisit'
 import type { RootAdapter } from './rootAdapter'
 import type { Transport } from './transport'
@@ -29,6 +33,7 @@ export type Scope = {
   reload(params?: VisitParams): void
   on<N extends ScopeEventName>(name: N, listener: (event: { detail: ScopeEventDetail<N> }) => unknown): () => void
   applyPage(page: ScopePage): void
+  dispose(): void
 }
 
 let scopeCount = 0
@@ -60,15 +65,33 @@ export function createScope(options: ScopeOptions, deps: ScopeDeps): Scope {
     }
   }
 
+  const concurrency = createConcurrency()
+  const remembered = new Map<string, unknown>() // filled in M08 (A8), cleared on dispose
+
+  const { dispose, wire } = createLifecycle({
+    isDisposed: () => status === 'disposed',
+    markDisposed: () => {
+      status = 'disposed'
+      rejectReady(new Error(`scope "${name}": disposed`)) // L2 — no-op if already resolved
+    },
+    concurrency,
+    emitter,
+    remembered,
+  })
+
   const ctx: ScopeContext = {
     id,
     name,
     transport: deps.transport,
     root: deps.root,
     getVersion: deps.getVersion,
-    parentUrl: () => deps.parent?.page.get()?.url ?? deps.root.currentUrl(),
+    parentUrl: () => {
+      const parentPageUrl = deps.parent?.page.get()?.url
+      return parentPageUrl ? toUrl(parentPageUrl, deps.root.currentUrl()).href : deps.root.currentUrl()
+    },
     page,
     emitter,
+    concurrency,
     status: () => status,
     setPage,
     failInitial: (reason) => {
@@ -76,22 +99,33 @@ export function createScope(options: ScopeOptions, deps: ScopeDeps): Scope {
         rejectReady(new Error(`scope "${name}": ${reason}`)) // L2
       }
     },
+    dispose,
+    parentApply: deps.parent ? (incoming) => deps.parent!.applyPage(incoming) : undefined,
   }
 
-  if (options.page) {
-    setPage(options.page)
-  } else if (options.url) {
-    void runVisit(ctx, options.url, {})
+  const guard = (action: string): boolean => {
+    if (status === 'disposed') {
+      console.warn(`scope "${name}": ${action}() after dispose is a no-op`) // L4
+      return false
+    }
+    return true
   }
 
-  return {
+  const scope: Scope = {
     id,
     name,
     page,
     status: () => status,
     ready: () => readyPromise,
-    visit: (url, params = {}) => void runVisit(ctx, url, params),
+    visit: (url, params = {}) => {
+      if (guard('visit')) {
+        void runVisit(ctx, url, params)
+      }
+    },
     reload: (params = {}) => {
+      if (!guard('reload')) {
+        return
+      }
       const current = page.get()
       if (!current) {
         console.warn(`scope "${name}": reload() before the first page is a no-op`)
@@ -103,5 +137,16 @@ export function createScope(options: ScopeOptions, deps: ScopeDeps): Scope {
     // For target routing (T7): applied like a fresh page, no success event
     // (there is no visit to report).
     applyPage: (incoming) => setPage(applyIncoming(null, incoming, { partial: false })),
+    dispose,
   }
+
+  wire(scope, deps.parent, deps.root)
+
+  if (options.page) {
+    setPage(options.page)
+  } else if (options.url) {
+    void runVisit(ctx, options.url, {})
+  }
+
+  return scope
 }
