@@ -42,13 +42,21 @@ The playground layout's `prefetch`/`prefetch="mount"` links fire root
 without interference (good sign for the design), but QA network assertions
 must filter by `X-Inertia-Scope`, not `X-Inertia`.
 
-## F-06 D3 against real Laravel is unverified for the abort-retry path
+## F-06 D3 does NOT work against real Laravel — partial responses drop `deferredProps` (CONFIRMED)
 
-D1/D2 verified end-to-end (widget: fallback → one partial fetch with
-`X-Inertia-Partial-Data: stats`). D3's retry-after-abort assumes the
-*partial* response still carries the `deferredProps` map — unit-tested with a
-fake, not yet observed against inertia-laravel. Worth one manual check
-(search in a widget-like scope while stats load).
+Verified in the browser (stats fetch artificially delayed past the 5s poll):
+the initial full response carries `deferredProps: {"default":["stats"]}`, but
+the poll's partial response (`only=time`) has **no `deferredProps` key**. Our
+`applyPage` takes non-props fields from the incoming page, so the merged page
+loses the map, D1 finds nothing, the aborted stats fetch is never retried and
+the fallback shows forever. **Happened:** 1 stats request, UI stuck.
+**Expected (D3):** 2 stats requests, stats visible. **Impact:** only bites
+when a scope visit interrupts a slow deferred load — the demo's fast fetch
+completes before the first poll, so it normally works. **Idea:** amend T5 so
+a partial merge *keeps* `current.deferredProps` when the incoming page has
+none (mirror of the props merge); alternatively the RFC should require server
+adapters to always include `deferredProps`. Rule change first (03-rules), then
+code — not patched in this PoC.
 
 ## F-07 Nested scopes need a component, so "only Index imports the package" bent
 
