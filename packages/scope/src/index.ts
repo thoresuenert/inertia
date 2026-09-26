@@ -13,6 +13,13 @@ export type {
   Target,
   VisitParams,
 } from './pure/types'
+export { createRootAdapter, type LocationLike, type RootAdapter } from './core/rootAdapter'
+export {
+  createTransport,
+  type Transport,
+  type TransportRequest,
+  type TransportResult,
+} from './core/transport'
 export { applyPage } from './pure/applyPage'
 export { createEmitter, type Emitter } from './pure/emitter'
 export { createStore, type Store } from './pure/store'
