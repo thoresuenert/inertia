@@ -86,10 +86,26 @@ moves layout attachment into `resolveComponent`, scopes would inherit it.
 request) delivered new props AND flash to the page behind. The D-03 gap
 (merge/once props not handled) never surfaced in the demo.
 
-## Needs a human pass
+## Human-pass items — all executed (browser-driven, results below)
 
-- Ctrl/Cmd-click on a pagination link inside a modal → opens a new tab.
-- Real asset-version change (QA simulated the 409 + `X-Inertia-Location`).
-- `<Deferred>` "reloading" slot state during a scope reload (K5) — visually.
-- StrictMode: the playground app does not enable it; L6 is unit-test-covered
-  only (`tests/react/RouterScope.test.tsx`).
+- **Ctrl/Cmd-click pagination link in a modal ✅** — not intercepted; the new
+  tab opens `/scopes/users?page=2` as a normal root page (15 rows), the
+  original tab and modal untouched. Scope pages really are ordinary pages.
+- **Real asset-version change ✅ (P2)** — a `public/build/manifest.json` makes
+  Laravel's `version()` real; mutating it mid-session made the next scoped
+  search send the stale hash, Laravel's own middleware answered
+  `409 + X-Inertia-Location`, and the scope hard-visited: one full document
+  load landing on `/scopes/users?search=a`. No mocks involved.
+- **K5 `reloading` slot inside a scope ✅** — Widget gained a "Refresh stats"
+  button + reloading indicator (kept as a demo improvement). With the stats
+  response delayed, "Refreshing…" showed while `window.location` was
+  `/scopes` and the scope page URL was `/scopes/widget` — under the old
+  `window.location` comparison this could never match, so this is K5's proof.
+- **StrictMode ✅ (L6)** — with the app wrapped in `<StrictMode>` (temporarily),
+  opening a modal fired exactly TWO initial scoped requests: the throwaway
+  scope's and the live one's, as the create-in-effect pattern predicts. All
+  functional, zero console errors. Curiosity: on fast localhost both requests
+  *completed* at the network level — the throwaway's abort raced its response;
+  the disposed scope discarded the result (C4/L3), so no double-apply. For the
+  RFC: one extra (discarded) request per open in dev StrictMode is the
+  documented cost of the effect-based lifecycle.
